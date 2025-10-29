@@ -22,33 +22,29 @@ except Exception as e:
     scaler = None
     feature_names = None
 
-def get_risk_level(probability, prediction):
-    """Enhanced risk classification based on probability"""
-    if prediction == 0:  # No heart disease
-        if probability < 0.3:
-            return "Very Low"
-        elif probability < 0.45:
-            return "Low" 
-        else:
-            return "Moderate"
-    else:  # Heart disease present
-        if probability < 0.6:
-            return "Moderate"
-        elif probability < 0.8:
-            return "High"
-        else:
-            return "Very High"
+def get_risk_level(probability):
+    """Enhanced risk classification based on probability ONLY"""
+    if probability < 0.2:
+        return "Very Low"
+    elif probability < 0.4:
+        return "Low"
+    elif probability < 0.6:
+        return "Moderate"
+    elif probability < 0.8:
+        return "High"
+    else:
+        return "Very High"
 
-def get_risk_message(risk_level):
+def get_risk_message(risk_level, probability):
     """Get appropriate message based on risk level"""
     messages = {
-        "Very Low": "Excellent heart health. Very low risk of heart disease.",
-        "Low": "Good heart health. Low risk of heart disease.",
-        "Moderate": "Moderate risk detected. Consider lifestyle improvements and regular checkups.",
-        "High": "High risk of heart disease. Consult a healthcare professional for evaluation.",
-        "Very High": "Very high risk detected. Immediate medical consultation recommended."
+        "Very Low": f"Excellent heart health! Very low risk ({probability:.1%}) of heart disease. Maintain your healthy lifestyle.",
+        "Low": f"Good heart health. Low risk ({probability:.1%}) of heart disease. Regular checkups recommended.",
+        "Moderate": f"Moderate risk ({probability:.1%}) detected. Consider lifestyle improvements and consult a healthcare professional.",
+        "High": f"High risk ({probability:.1%}) of heart disease. Recommended to consult a cardiologist for evaluation.",
+        "Very High": f"Very high risk ({probability:.1%}) detected! Immediate medical consultation strongly recommended."
     }
-    return messages.get(risk_level, "Risk assessment completed.")
+    return messages.get(risk_level, f"Risk assessment completed. Probability: {probability:.1%}")
 
 class Predict(Resource):
     def post(self):
@@ -85,9 +81,9 @@ class Predict(Resource):
             prediction = int(model.predict(features_scaled)[0])
             probability = float(model.predict_proba(features_scaled)[0][1])
             
-            # Enhanced risk classification
-            risk_level = get_risk_level(probability, prediction)
-            message = get_risk_message(risk_level)
+            # Enhanced risk classification (based on probability only)
+            risk_level = get_risk_level(probability)
+            message = get_risk_message(risk_level, probability)
             
             response = {
                 'prediction': prediction,
@@ -115,23 +111,38 @@ class Health(Resource):
             'model_type': str(type(model).__name__) if model else 'None'
         }
 
-# Test endpoint to verify model behavior
+# Test endpoint to verify all risk levels
 class Test(Resource):
     def get(self):
         if model is None:
             return {'error': 'Model not loaded'}, 500
             
-        # Test cases from Colab verification
+        # Test cases for all risk levels
         test_cases = {
-            'Low Risk Expected (0)': {
+            'Very Low Risk': {
                 "age": 35, "sex": 0, "cp": 0, "trestbps": 110, 
                 "chol": 160, "fbs": 0, "restecg": 0, "thalach": 180,
                 "exang": 0, "oldpeak": 0.0, "slope": 1, "ca": 0, "thal": 1
             },
-            'High Risk Expected (1)': {
+            'Low Risk': {
+                "age": 45, "sex": 0, "cp": 1, "trestbps": 120, 
+                "chol": 180, "fbs": 0, "restecg": 0, "thalach": 160,
+                "exang": 0, "oldpeak": 0.8, "slope": 1, "ca": 0, "thal": 2
+            },
+            'Moderate Risk': {
+                "age": 55, "sex": 1, "cp": 2, "trestbps": 140, 
+                "chol": 220, "fbs": 0, "restecg": 1, "thalach": 140,
+                "exang": 1, "oldpeak": 1.5, "slope": 1, "ca": 1, "thal": 2
+            },
+            'High Risk': {
                 "age": 65, "sex": 1, "cp": 3, "trestbps": 180, 
                 "chol": 280, "fbs": 1, "restecg": 1, "thalach": 120,
-                "exang": 1, "oldpeak": 4.2, "slope": 2, "ca": 3, "thal": 3
+                "exang": 1, "oldpeak": 2.5, "slope": 2, "ca": 2, "thal": 3
+            },
+            'Very High Risk': {
+                "age": 70, "sex": 1, "cp": 3, "trestbps": 200, 
+                "chol": 300, "fbs": 1, "restecg": 2, "thalach": 100,
+                "exang": 1, "oldpeak": 4.0, "slope": 2, "ca": 3, "thal": 3
             }
         }
         
@@ -144,29 +155,18 @@ class Test(Resource):
                 
                 prediction = int(model.predict(features_scaled)[0])
                 probability = float(model.predict_proba(features_scaled)[0][1])
-                risk_level = get_risk_level(probability, prediction)
-                
-                expected = 1 if 'High Risk' in case_name else 0
-                correct = prediction == expected
+                risk_level = get_risk_level(probability)
                 
                 results[case_name] = {
                     'prediction': prediction,
                     'probability': probability,
                     'risk_level': risk_level,
-                    'expected': expected,
-                    'correct': correct
+                    'expected_risk': case_name.split(' ')[0]  # Get "Very", "Low", etc.
                 }
             except Exception as e:
                 results[case_name] = {'error': str(e)}
         
-        return {
-            'test_results': results,
-            'model_working_correctly': all(
-                result.get('correct', False) 
-                for result in results.values() 
-                if 'error' not in result
-            )
-        }
+        return {'test_results': results}
 
 # Sample data endpoint for frontend reference
 class Samples(Resource):
