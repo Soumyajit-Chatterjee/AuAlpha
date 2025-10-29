@@ -4,52 +4,66 @@ import joblib
 import numpy as np
 import pandas as pd
 from flask_cors import CORS
+import os
 
 app = Flask(__name__)
 CORS(app)
 api = Api(app)
 
-# Load the model and preprocessing objects
-try:
-    model = joblib.load('heart_disease_model.pkl')
-    scaler = joblib.load('scaler.pkl')
-    feature_names = joblib.load('feature_names.pkl')
-    print("Model and preprocessing objects loaded successfully!")
-except Exception as e:
-    print(f"Error loading model: {e}")
-    model = None
-    scaler = None
-    feature_names = None
+# Global variables for model
+model = None
+scaler = None
+feature_names = None
+model_loaded = False
+
+def load_model():
+    global model, scaler, feature_names, model_loaded
+    try:
+        model = joblib.load('heart_disease_model.pkl')
+        scaler = joblib.load('scaler.pkl')
+        feature_names = joblib.load('feature_names.pkl')
+        model_loaded = True
+        print("✅ Model and preprocessing objects loaded successfully!")
+    except Exception as e:
+        print(f"❌ Error loading model: {e}")
+        model_loaded = False
+
+# Load model on startup
+load_model()
 
 class HeartDiseasePrediction(Resource):
     def post(self):
         try:
-            if model is None or scaler is None:
+            if not model_loaded:
                 return {
-                    'error': 'Model not loaded properly',
+                    'error': 'Model not loaded properly. Please check server logs.',
                     'prediction': None,
                     'probability': None
-                }, 500
+                }, 503
 
             # Get JSON data from request
             data = request.get_json()
             
-            # Extract features in correct order
-            features = []
-            for feature in feature_names:
-                if feature in data:
-                    features.append(float(data[feature]))
-                else:
-                    return {
-                        'error': f'Missing feature: {feature}',
-                        'prediction': None,
-                        'probability': None
-                    }, 400
+            # Validate required fields
+            required_features = ['age', 'sex', 'cp', 'trestbps', 'chol', 'fbs', 
+                               'restecg', 'thalach', 'exang', 'oldpeak', 'slope', 
+                               'ca', 'thal']
+            
+            missing_features = [feature for feature in required_features if feature not in data]
+            if missing_features:
+                return {
+                    'error': f'Missing features: {missing_features}',
+                    'prediction': None,
+                    'probability': None
+                }, 400
 
+            # Extract features in correct order
+            features = [float(data[feature]) for feature in feature_names]
+            
             # Convert to numpy array and reshape
             features_array = np.array(features).reshape(1, -1)
             
-            # Scale features (assuming the best model requires scaling)
+            # Scale features
             features_scaled = scaler.transform(features_array)
             
             # Make prediction
@@ -69,7 +83,7 @@ class HeartDiseasePrediction(Resource):
             
         except Exception as e:
             return {
-                'error': str(e),
+                'error': f'Prediction error: {str(e)}',
                 'prediction': None,
                 'probability': None
             }, 500
@@ -78,8 +92,9 @@ class HealthCheck(Resource):
     def get(self):
         return {
             'status': 'healthy',
-            'model_loaded': model is not None,
-            'service': 'Heart Disease Prediction API'
+            'model_loaded': model_loaded,
+            'service': 'Heart Disease Prediction API',
+            'python_version': os.environ.get('PYTHON_VERSION', 'Unknown')
         }
 
 # Add resources to API
