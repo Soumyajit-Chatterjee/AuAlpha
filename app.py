@@ -23,14 +23,14 @@ except Exception as e:
     feature_names = None
 
 def get_risk_level(probability):
-    """Enhanced risk classification based on probability ONLY"""
-    if probability < 0.2:
+    """Enhanced risk classification with all 5 levels"""
+    if probability < 0.15:
         return "Very Low"
-    elif probability < 0.4:
-        return "Low"
-    elif probability < 0.6:
+    elif probability < 0.35:
+        return "Low" 
+    elif probability < 0.55:
         return "Moderate"
-    elif probability < 0.8:
+    elif probability < 0.75:
         return "High"
     else:
         return "Very High"
